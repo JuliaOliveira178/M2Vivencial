@@ -1,15 +1,15 @@
-# Objeto 3D - Módulo 3
-**Júlia Oliveira**
+# M2 Vivencial — Objeto 3D
+**Júlia Oliveira | Computação Gráfica**
 
-Atividade acadêmica de Computação Gráfica — seleção e transformação de múltiplos objetos 3D com OpenGL.
+---
 
-## Dependências
+Cena interativa com três objetos 3D carregados a partir de arquivo `.obj`. O usuário pode selecionar individualmente cada objeto e aplicar transformações via teclado.
 
-- CMake 3.10+
-- Compilador C++17 (MinGW/MSVC)
-- Git (para o FetchContent baixar GLFW e GLM automaticamente)
+---
 
-## Como compilar e executar
+## Compilação
+
+Requisitos: **CMake 3.10+** e compilador **C++17**.
 
 ```bash
 mkdir build
@@ -19,43 +19,42 @@ cmake --build .
 .\Objeto3D.exe
 ```
 
-## Controles
+> GLFW e GLM são baixados automaticamente pelo CMake na primeira compilação.
 
-| Tecla | Ação |
-|-------|------|
-| `TAB` | Alterna o objeto selecionado: Objeto 0 → 1 → 2 → 0 |
-| `R` | Ativa modo **Girar** |
-| `T` | Ativa modo **Transladar** |
-| `S` | Ativa modo **Escalar** |
+---
 
-### Modo Girar (`R`)
-| Tecla | Ação |
-|-------|------|
-| `←` / `→` | Rotaciona no eixo Y |
-| `↑` / `↓` | Rotaciona no eixo X |
-| `X` | Rotaciona no eixo X |
-| `Y` | Rotaciona no eixo Y |
-| `Z` | Rotaciona no eixo Z |
+## Como usar
 
-### Modo Transladar (`T`)
-| Tecla | Ação |
-|-------|------|
-| `←` / `→` | Move em X |
-| `↑` / `↓` | Move em Y |
+O título da janela sempre mostra qual objeto está selecionado e qual modo está ativo.
 
-### Modo Escalar (`S`)
-| Tecla | Ação |
-|-------|------|
-| `↑` / `+` | Aumenta escala |
-| `↓` / `-` | Diminui escala |
+**Seleção**
+- `TAB` — passa para o próximo objeto (0 → 1 → 2 → 0)
 
-`ESC` — fecha a janela
+**Modos de transformação**
+- `R` — Girar
+- `T` — Transladar  
+- `S` — Escalar
 
-O modo ativo e o objeto selecionado são exibidos no título da janela.
+**Ações com as setas (conforme o modo ativo)**
 
-## Tecnologias
+| Modo | `←` `→` | `↑` `↓` |
+|------|---------|---------|
+| Girar | Eixo Y | Eixo X |
+| Transladar | Eixo X | Eixo Y |
+| Escalar | — | Aumentar / Diminuir |
 
-- OpenGL 4.5 + GLSL 450
-- GLFW 3.4 — janela e entrada
-- GLM — matemática 3D
-- GLAD — loader de funções OpenGL
+No modo **Girar**, as teclas `X` `Y` `Z` rotacionam diretamente no eixo correspondente.  
+No modo **Escalar**, `+` e `-` também funcionam.
+
+`ESC` fecha a aplicação.
+
+---
+
+## Stack
+
+| | |
+|---|---|
+| Renderização | OpenGL 4.5 / GLSL 450 |
+| Janela e input | GLFW 3.4 |
+| Matemática 3D | GLM |
+| Loader OpenGL | GLAD |
