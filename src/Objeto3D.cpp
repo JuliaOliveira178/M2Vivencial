@@ -1,15 +1,17 @@
-/* Objeto 3D - Atividade Acadêmica Computação Gráfica
+/* Objeto 3D - Atividade Acadêmica Computação Gráfica - Módulo 3
+ * Júlia Oliveira
  *
  * Controles:
- *   W/S       - translação em Y (cima/baixo)
- *   A/D       - translação em X (esquerda/direita)
- *   +/-       - escala uniforme (aumentar/diminuir)
- *   X/Y/Z     - rotação incremental no respectivo eixo (acumula, segure para girar)
- *   TAB       - alterna objeto selecionado: 0 -> 1 -> 2 -> TODOS -> 0 -> ...
+ *   TAB       - alterna objeto selecionado: 0 -> 1 -> 2 -> 0 -> ...
+ *   R         - ativa modo Girar   -> X/Y/Z rotacionam no eixo respectivo
+ *   T         - ativa modo Transladar -> W/A/D/Seta↑↓←→ transladam
+ *   S         - ativa modo Escalar -> +/- escala uniforme
  *   ESC       - fecha a janela
  */
 
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -23,8 +25,8 @@ using namespace std;
 #include <glm/gtc/type_ptr.hpp>
 
 void key_callback(GLFWwindow* janela, int tecla, int scancode, int acao, int modo);
+GLuint carregarOBJ(const string& caminho, int& nVertices, glm::vec3 cor);
 int inicializarShader();
-int inicializarGeometria();
 
 const GLuint LARGURA = 1000, ALTURA = 1000;
 
@@ -50,26 +52,30 @@ const GLchar* fonteFragmento =
     "}\n\0";
 
 struct Objeto {
+    GLuint vao;
+    int nVertices;
     glm::vec3 posicao;
     float escala;
     float anguloX, anguloY, anguloZ;
 
-    Objeto(glm::vec3 pos, float s = 0.25f)
-        : posicao(pos), escala(s),
+    Objeto(GLuint v, int nv, glm::vec3 pos, float s = 0.25f)
+        : vao(v), nVertices(nv), posicao(pos), escala(s),
           anguloX(0.0f), anguloY(0.0f), anguloZ(0.0f) {}
 };
 
 vector<Objeto> objetos;
 
-// 0, 1, 2 = objeto selecionado
+// Índice do objeto atualmente selecionado
 int modoAtivo = 0;
+
+enum Modo { GIRAR, TRANSLADAR, ESCALAR };
+Modo modoTransformacao = TRANSLADAR;
 
 const float PASSO_TRANSLACAO = 0.08f;
 const float PASSO_ESCALA     = 0.04f;
 const float ESCALA_MIN       = 0.04f;
 const float PASSO_ROTACAO    = glm::radians(7.0f);
 
-// Aplica uma função ao objeto selecionado
 template<typename Fn>
 void aplicarAoSelecionado(Fn fn) {
     fn(objetos[modoAtivo]);
@@ -88,62 +94,73 @@ int main()
         return -1;
     }
 
-    const GLubyte* placa    = glGetString(GL_RENDERER);
-    const GLubyte* versaoGL = glGetString(GL_VERSION);
-    cout << "Renderer: " << placa << endl;
-    cout << "OpenGL version: " << versaoGL << endl;
+    cout << "Renderer: " << glGetString(GL_RENDERER) << endl;
+    cout << "OpenGL version: " << glGetString(GL_VERSION) << endl;
 
     int largura, altura;
     glfwGetFramebufferSize(janela, &largura, &altura);
     glViewport(0, 0, largura, altura);
 
     GLuint programaShader = inicializarShader();
-    GLuint vao            = inicializarGeometria();
-
     glUseProgram(programaShader);
     GLint locModelo = glGetUniformLocation(programaShader, "model");
 
     glEnable(GL_DEPTH_TEST);
 
-    // Três objetos dispostos em triângulo
-    objetos.push_back(Objeto(glm::vec3(-0.45f, -0.3f, 0.0f)));
-    objetos.push_back(Objeto(glm::vec3( 0.45f, -0.3f, 0.0f)));
-    objetos.push_back(Objeto(glm::vec3( 0.00f,  0.5f, 0.0f)));
+    // Três Suzannes em triângulo com cores laranja, turquesa e roxo
+    int nv;
+    GLuint vao0 = carregarOBJ("assets/modelo.obj", nv, glm::vec3(1.0f, 0.55f, 0.0f));
+    objetos.push_back(Objeto(vao0, nv, glm::vec3(-0.45f, -0.3f, 0.0f), 0.2f));
+
+    GLuint vao1 = carregarOBJ("assets/modelo.obj", nv, glm::vec3(0.0f, 0.75f, 0.65f));
+    objetos.push_back(Objeto(vao1, nv, glm::vec3( 0.45f, -0.3f, 0.0f), 0.2f));
+
+    GLuint vao2 = carregarOBJ("assets/modelo.obj", nv, glm::vec3(0.55f, 0.0f, 0.8f));
+    objetos.push_back(Objeto(vao2, nv, glm::vec3( 0.00f,  0.5f, 0.0f), 0.2f));
+
+    if (vao0 == (GLuint)-1 || vao1 == (GLuint)-1 || vao2 == (GLuint)-1) {
+        cerr << "Falha ao carregar modelos OBJ." << endl;
+        glfwTerminate();
+        return -1;
+    }
 
     while (!glfwWindowShouldClose(janela))
     {
         glfwPollEvents();
 
-        string tituloJanela = "Cubo 3D | Júlia Oliveira";
+        string nomeObjeto = "Objeto " + to_string(modoAtivo);
+        string nomeModo = (modoTransformacao == GIRAR)      ? "GIRAR"
+                        : (modoTransformacao == TRANSLADAR) ? "TRANSLADAR"
+                        :                                     "ESCALAR";
+        string dica = (modoTransformacao == GIRAR)      ? "  setas=girar XYZ=eixo"
+                    : (modoTransformacao == TRANSLADAR)  ? "  setas=mover"
+                    :                                      "  setas/+/-=escala";
+        string tituloJanela = "Objeto 3D | Julia Oliveira  |  [" + nomeObjeto + "]"
+                            + "  [" + nomeModo + "]"
+                            + "  |  R/T/S=modo  TAB=selecionar" + dica;
         glfwSetWindowTitle(janela, tituloJanela.c_str());
 
         glClearColor(0.08f, 0.12f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glBindVertexArray(vao);
         for (int i = 0; i < (int)objetos.size(); i++)
         {
             glm::mat4 matriz = glm::mat4(1.0f);
-
-            // Ordem TRS: primeiro escala, depois rotação, depois translação
             matriz = glm::translate(matriz, objetos[i].posicao);
-
-            // Rotação acumulada nos três eixos independentemente
             matriz = glm::rotate(matriz, objetos[i].anguloX, glm::vec3(1.0f, 0.0f, 0.0f));
             matriz = glm::rotate(matriz, objetos[i].anguloY, glm::vec3(0.0f, 1.0f, 0.0f));
             matriz = glm::rotate(matriz, objetos[i].anguloZ, glm::vec3(0.0f, 0.0f, 1.0f));
-
             matriz = glm::scale(matriz, glm::vec3(objetos[i].escala));
 
             glUniformMatrix4fv(locModelo, 1, GL_FALSE, glm::value_ptr(matriz));
-            glDrawArrays(GL_TRIANGLES, 0, 36);
+            glBindVertexArray(objetos[i].vao);
+            glDrawArrays(GL_TRIANGLES, 0, objetos[i].nVertices);
         }
         glBindVertexArray(0);
 
         glfwSwapBuffers(janela);
     }
 
-    glDeleteVertexArrays(1, &vao);
     glfwTerminate();
     return 0;
 }
@@ -153,40 +170,56 @@ void key_callback(GLFWwindow* janela, int tecla, int scancode, int acao, int mod
     if (tecla == GLFW_KEY_ESCAPE && acao == GLFW_PRESS)
         glfwSetWindowShouldClose(janela, GL_TRUE);
 
-    // Ciclo: Objeto 0 -> Objeto 1 -> Objeto 2 -> Objeto 0 -> ...
+    // Ciclo: Objeto 0 -> 1 -> 2 -> 0 -> ...
     if (tecla == GLFW_KEY_TAB && acao == GLFW_PRESS)
         modoAtivo = (modoAtivo + 1) % (int)objetos.size();
 
-    // Translação e escala respondem a PRESS e REPEAT (segurar a tecla)
-    if (acao == GLFW_PRESS || acao == GLFW_REPEAT)
-    {
-        if (tecla == GLFW_KEY_A)
-            aplicarAoSelecionado([](Objeto& o){ o.posicao.x -= PASSO_TRANSLACAO; });
-        if (tecla == GLFW_KEY_D)
-            aplicarAoSelecionado([](Objeto& o){ o.posicao.x += PASSO_TRANSLACAO; });
-        if (tecla == GLFW_KEY_W)
-            aplicarAoSelecionado([](Objeto& o){ o.posicao.y += PASSO_TRANSLACAO; });
-        if (tecla == GLFW_KEY_S)
-            aplicarAoSelecionado([](Objeto& o){ o.posicao.y -= PASSO_TRANSLACAO; });
-
-        if (tecla == GLFW_KEY_EQUAL)
-            aplicarAoSelecionado([](Objeto& o){ o.escala += PASSO_ESCALA; });
-        if (tecla == GLFW_KEY_MINUS)
-            aplicarAoSelecionado([](Objeto& o){
-                o.escala -= PASSO_ESCALA;
-                if (o.escala < ESCALA_MIN) o.escala = ESCALA_MIN;
-            });
+    // Alternar modo de transformação com R / T / S
+    if (acao == GLFW_PRESS) {
+        if (tecla == GLFW_KEY_R) modoTransformacao = GIRAR;
+        if (tecla == GLFW_KEY_T) modoTransformacao = TRANSLADAR;
+        if (tecla == GLFW_KEY_S) modoTransformacao = ESCALAR;
     }
 
-    // Rotação incremental: acumula ângulo, responde a PRESS e REPEAT
     if (acao == GLFW_PRESS || acao == GLFW_REPEAT)
     {
-        if (tecla == GLFW_KEY_X)
-            aplicarAoSelecionado([](Objeto& o){ o.anguloX += PASSO_ROTACAO; });
-        if (tecla == GLFW_KEY_Y)
-            aplicarAoSelecionado([](Objeto& o){ o.anguloY += PASSO_ROTACAO; });
-        if (tecla == GLFW_KEY_Z)
-            aplicarAoSelecionado([](Objeto& o){ o.anguloZ += PASSO_ROTACAO; });
+        if (modoTransformacao == TRANSLADAR) {
+            if (tecla == GLFW_KEY_LEFT)
+                aplicarAoSelecionado([](Objeto& o){ o.posicao.x -= PASSO_TRANSLACAO; });
+            if (tecla == GLFW_KEY_RIGHT)
+                aplicarAoSelecionado([](Objeto& o){ o.posicao.x += PASSO_TRANSLACAO; });
+            if (tecla == GLFW_KEY_UP)
+                aplicarAoSelecionado([](Objeto& o){ o.posicao.y += PASSO_TRANSLACAO; });
+            if (tecla == GLFW_KEY_DOWN)
+                aplicarAoSelecionado([](Objeto& o){ o.posicao.y -= PASSO_TRANSLACAO; });
+        }
+
+        if (modoTransformacao == ESCALAR) {
+            if (tecla == GLFW_KEY_EQUAL || tecla == GLFW_KEY_UP)
+                aplicarAoSelecionado([](Objeto& o){ o.escala += PASSO_ESCALA; });
+            if (tecla == GLFW_KEY_MINUS || tecla == GLFW_KEY_DOWN)
+                aplicarAoSelecionado([](Objeto& o){
+                    o.escala -= PASSO_ESCALA;
+                    if (o.escala < ESCALA_MIN) o.escala = ESCALA_MIN;
+                });
+        }
+
+        if (modoTransformacao == GIRAR) {
+            if (tecla == GLFW_KEY_LEFT)
+                aplicarAoSelecionado([](Objeto& o){ o.anguloY -= PASSO_ROTACAO; });
+            if (tecla == GLFW_KEY_RIGHT)
+                aplicarAoSelecionado([](Objeto& o){ o.anguloY += PASSO_ROTACAO; });
+            if (tecla == GLFW_KEY_UP)
+                aplicarAoSelecionado([](Objeto& o){ o.anguloX -= PASSO_ROTACAO; });
+            if (tecla == GLFW_KEY_DOWN)
+                aplicarAoSelecionado([](Objeto& o){ o.anguloX += PASSO_ROTACAO; });
+            if (tecla == GLFW_KEY_X)
+                aplicarAoSelecionado([](Objeto& o){ o.anguloX += PASSO_ROTACAO; });
+            if (tecla == GLFW_KEY_Y)
+                aplicarAoSelecionado([](Objeto& o){ o.anguloY += PASSO_ROTACAO; });
+            if (tecla == GLFW_KEY_Z)
+                aplicarAoSelecionado([](Objeto& o){ o.anguloZ += PASSO_ROTACAO; });
+        }
     }
 }
 
@@ -227,80 +260,75 @@ int inicializarShader()
     return programa;
 }
 
-int inicializarGeometria()
+GLuint carregarOBJ(const string& caminho, int& nVertices, glm::vec3 cor)
 {
-    // 6 faces × 2 triângulos × 3 vértices = 36 vértices
-    // Formato por vértice: x, y, z, r, g, b
-    GLfloat vertices[] = {
+    vector<glm::vec3> vertices;
+    vector<glm::vec2> coordTex;
+    vector<glm::vec3> normais;
+    vector<GLfloat> buffer;
 
-        // Face frontal (+Z) — Laranja
-        -0.5f, -0.5f,  0.5f,  1.0f, 0.55f, 0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.55f, 0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.55f, 0.0f,
-        -0.5f, -0.5f,  0.5f,  1.0f, 0.55f, 0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.55f, 0.0f,
-        -0.5f,  0.5f,  0.5f,  1.0f, 0.55f, 0.0f,
+    ifstream arq(caminho);
+    if (!arq.is_open()) {
+        cerr << "Erro ao abrir o arquivo " << caminho << endl;
+        return (GLuint)-1;
+    }
 
-        // Face traseira (-Z) — Roxo
-         0.5f, -0.5f, -0.5f,  0.55f, 0.0f, 0.8f,
-        -0.5f, -0.5f, -0.5f,  0.55f, 0.0f, 0.8f,
-        -0.5f,  0.5f, -0.5f,  0.55f, 0.0f, 0.8f,
-         0.5f, -0.5f, -0.5f,  0.55f, 0.0f, 0.8f,
-        -0.5f,  0.5f, -0.5f,  0.55f, 0.0f, 0.8f,
-         0.5f,  0.5f, -0.5f,  0.55f, 0.0f, 0.8f,
+    string linha;
+    while (getline(arq, linha)) {
+        istringstream ss(linha);
+        string palavra;
+        ss >> palavra;
 
-        // Face esquerda (-X) — Turquesa
-        -0.5f, -0.5f, -0.5f,  0.0f, 0.75f, 0.65f,
-        -0.5f, -0.5f,  0.5f,  0.0f, 0.75f, 0.65f,
-        -0.5f,  0.5f,  0.5f,  0.0f, 0.75f, 0.65f,
-        -0.5f, -0.5f, -0.5f,  0.0f, 0.75f, 0.65f,
-        -0.5f,  0.5f,  0.5f,  0.0f, 0.75f, 0.65f,
-        -0.5f,  0.5f, -0.5f,  0.0f, 0.75f, 0.65f,
+        if (palavra == "v") {
+            glm::vec3 v;
+            ss >> v.x >> v.y >> v.z;
+            vertices.push_back(v);
+        } else if (palavra == "vt") {
+            glm::vec2 vt;
+            ss >> vt.s >> vt.t;
+            coordTex.push_back(vt);
+        } else if (palavra == "vn") {
+            glm::vec3 vn;
+            ss >> vn.x >> vn.y >> vn.z;
+            normais.push_back(vn);
+        } else if (palavra == "f") {
+            string token;
+            while (ss >> token) {
+                int vi = 0, ti = 0, ni = 0;
+                istringstream ssf(token);
+                string idx;
+                if (getline(ssf, idx, '/')) vi = !idx.empty() ? stoi(idx) - 1 : 0;
+                if (getline(ssf, idx, '/')) ti = !idx.empty() ? stoi(idx) - 1 : 0;
+                if (getline(ssf, idx))      ni = !idx.empty() ? stoi(idx) - 1 : 0;
 
-        // Face direita (+X) — Rosa
-         0.5f, -0.5f,  0.5f,  1.0f, 0.35f, 0.65f,
-         0.5f, -0.5f, -0.5f,  1.0f, 0.35f, 0.65f,
-         0.5f,  0.5f, -0.5f,  1.0f, 0.35f, 0.65f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.35f, 0.65f,
-         0.5f,  0.5f, -0.5f,  1.0f, 0.35f, 0.65f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.35f, 0.65f,
-
-        // Face superior (+Y) — Branco
-        -0.5f,  0.5f,  0.5f,  1.0f, 1.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 1.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 1.0f,
-        -0.5f,  0.5f,  0.5f,  1.0f, 1.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 1.0f,
-        -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 1.0f,
-
-        // Face inferior (-Y) — Marrom
-        -0.5f, -0.5f, -0.5f,  0.75f, 0.25f, 0.0f,
-         0.5f, -0.5f, -0.5f,  0.75f, 0.25f, 0.0f,
-         0.5f, -0.5f,  0.5f,  0.75f, 0.25f, 0.0f,
-        -0.5f, -0.5f, -0.5f,  0.75f, 0.25f, 0.0f,
-         0.5f, -0.5f,  0.5f,  0.75f, 0.25f, 0.0f,
-        -0.5f, -0.5f,  0.5f,  0.75f, 0.25f, 0.0f,
-    };
+                buffer.push_back(vertices[vi].x);
+                buffer.push_back(vertices[vi].y);
+                buffer.push_back(vertices[vi].z);
+                buffer.push_back(cor.r);
+                buffer.push_back(cor.g);
+                buffer.push_back(cor.b);
+            }
+        }
+    }
+    arq.close();
 
     GLuint vbo, vao;
-
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, buffer.size() * sizeof(GLfloat), buffer.data(), GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
-    // Atributo 0: posição (x, y, z)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (GLvoid*)0);
     glEnableVertexAttribArray(0);
 
-    // Atributo 1: cor (r, g, b)
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
     glEnableVertexAttribArray(1);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
+    nVertices = (int)(buffer.size() / 6);
     return vao;
 }

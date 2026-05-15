@@ -46,3 +46,8 @@ endif()
 add_executable(Objeto3D src/Objeto3D.cpp ${GLAD_C_FILE})
 target_include_directories(Objeto3D PRIVATE ${CMAKE_SOURCE_DIR}/include/glad ${glm_SOURCE_DIR})
 target_link_libraries(Objeto3D glfw ${OPENGL_LIBS})
+
+add_custom_command(TARGET Objeto3D POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/assets"
+    "$<TARGET_FILE_DIR:Objeto3D>/assets")
